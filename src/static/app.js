@@ -13,6 +13,17 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Clear previous options from the select dropdown
+      activitySelect.innerHTML = "";
+
+      // Optionally, add a placeholder option
+      const placeholderOption = document.createElement("option");
+      placeholderOption.value = "";
+      placeholderOption.textContent = "Select an activity";
+      placeholderOption.disabled = true;
+      placeholderOption.selected = true;
+      activitySelect.appendChild(placeholderOption);
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,20 +31,53 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Generate participants list HTML with delete icon and no bullet points
+        const participantsHTML = `
+          <div class="participants-section">
+            <h5>Participants</h5>
+            <ul class="participants-list" style="padding-left:0;">
+              ${details.participants.length === 0
+                ? '<li style="list-style-type:none;"><em>No participants yet</em></li>'
+                : details.participants.map((email, idx) => `
+                    <li style="list-style-type:none; display:flex; align-items:center;">
+                      <span>${email}</span>
+                      <button class="delete-participant" data-activity="${name}" data-email="${email}" title="Unregister" style="margin-left:8px; cursor:pointer; background:none; border:none; font-size:1em;">🗑️</button>
+                    </li>
+                  `).join('')}
+            </ul>
+          </div>
+        `;
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
         `;
-
         activitiesList.appendChild(activityCard);
 
-        // Add option to select dropdown
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        activitySelect.appendChild(option);
+        // Add event listeners for delete buttons after rendering
+        setTimeout(() => {
+          activityCard.querySelectorAll('.delete-participant').forEach(btn => {
+            btn.onclick = async function() {
+              const activityName = btn.getAttribute('data-activity');
+              const participantEmail = btn.getAttribute('data-email');
+              try {
+                const response = await fetch(`/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(participantEmail)}`, {
+                  method: 'POST',
+                });
+                if (response.ok) {
+                  fetchActivities();
+                } else {
+                  alert('Failed to unregister participant.');
+                }
+              } catch (err) {
+                alert('Error occurred while unregistering.');
+              }
+            };
+          });
+        }, 0);
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
@@ -62,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        await fetchActivities(); // Ensure UI updates before showing message
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
